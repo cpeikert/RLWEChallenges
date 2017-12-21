@@ -1,0 +1,9 @@
+reprof.py
+**/*.prof
+**/.stack-work
+**/rlwe-secrets.tar.gz
+**/rlwe-challenges.*
+**/*.pyc
+**/*.class
+**/*.o
+**/TAGS
