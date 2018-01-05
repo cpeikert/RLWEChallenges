@@ -16,8 +16,8 @@
 #  name: custom-snapshot
 #  location: "./custom-snapshot.yaml"
 
-resolver: lts-8.2
-compiler-check: newer-minor
+resolver: nightly-2017-10-10
+system-ghc: true
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -41,11 +41,21 @@ compiler-check: newer-minor
 packages:
 - ./
 
+- location:
+    git:    git@github.com:cpeikert/Lol.git
+    # current tip of master-8.2
+    commit: cd4387c68935b215547ef67e532d499dc9645a07
+  extra-dep: true
+  subdirs:
+    - 'lol'
+    - 'lol-apps'
+    - 'lol-cpp'
+
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 
 extra-deps:
-- lol-0.5.0.2
-- lol-cpp-0.0.0.3
+- lol-cpp-0.0.0.4
 - non-negative-0.1.1
 - numeric-prelude-0.4.2
 - tagged-transformer-0.8
