@@ -1,4 +1,4 @@
-:set -i.:exec
+:set -iexec
 
 :set -fprint-explicit-kinds
 :set -fprint-explicit-foralls
