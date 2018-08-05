@@ -13,7 +13,7 @@ import qualified Crypto.Proto.RLWE.SampleRLWR as Crypto.Proto.RLWE (SampleRLWR)
 data InstanceRLWR = InstanceRLWR{challengeID :: !(P'.Int32), instanceID :: !(P'.Int32),
                                  params :: !(Crypto.Proto.RLWE.Challenges.RLWRParams),
                                  samples :: !(P'.Seq Crypto.Proto.RLWE.SampleRLWR)}
-                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+                    deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable InstanceRLWR where
   mergeAppend (InstanceRLWR x'1 x'2 x'3 x'4) (InstanceRLWR y'1 y'2 y'3 y'4)

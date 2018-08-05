@@ -13,7 +13,7 @@ import qualified Crypto.Proto.RLWE.Challenges.Challenge.Params as Crypto.Proto.R
 
 data Challenge = Challenge{challengeID :: !(P'.Int32), numInstances :: !(P'.Int32), beaconEpoch :: !(P'.Int64),
                            beaconOffset :: !(P'.Int32), params :: P'.Maybe (Crypto.Proto.RLWE.Challenges.Challenge.Params)}
-               deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+                 deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable Challenge where
   mergeAppend (Challenge x'1 x'2 x'3 x'4 x'5) (Challenge y'1 y'2 y'3 y'4 y'5)

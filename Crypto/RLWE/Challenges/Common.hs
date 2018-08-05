@@ -23,10 +23,12 @@ module Crypto.RLWE.Challenges.Common where
 
 import Crypto.RLWE.Challenges.Beacon
 
-import           Crypto.Lol (Fact)
+import           Crypto.Lol (Cyc, Fact, Lift', FunctorCyc)
 import           Crypto.Lol.Types     hiding (RRq)
 import qualified Crypto.Lol.Types as RRq
+import           Crypto.Lol.Types.IFunctor
 import           Crypto.Lol.Types.Proto
+import           Crypto.Lol.Cyclotomic.CycRep as C
 
 import Crypto.Proto.RLWE.Challenges.Challenge
 import Crypto.Proto.RLWE.Challenges.InstanceContProduct
@@ -41,6 +43,7 @@ import Crypto.Lol.Cyclotomic.Tensor
 import Crypto.Random.DRBG
 
 import Control.Monad.Except
+import Control.Monad.Random
 
 import Data.ByteString.Lazy (unpack)
 import Data.Constraint
@@ -78,14 +81,19 @@ type RRq q = RRq.RRq q Double
 
 -- | Contains the necessary entailments to allow generation and verification
 -- using reified moduli and cyclotomic indices.
-class (Tensor t, TElt t (Complex Double), TElt t Double, TElt t Int64)
+class (TensorPowDec t (Complex Double), TensorPowDec t Double, TensorPowDec t Int64)
   => EntailTensor t where
   entailTensor :: Tagged '(t,m,q) ((Reifies q Int64, Fact m) :-
     (ProtoType (t m (RRq q)) ~ KqProduct,
      ProtoType (t m (Zq q))  ~ RqProduct,
-     Protoable (t m (Zq q)),
-     Protoable (t m (RRq q)),
-     TElt t (Zq q), TElt t (RRq q)))
+     Protoable ((Cyc t) m (Zq q)),
+     Eq ((Cyc t) m (Zq q)),
+     Protoable ((Cyc t) m (RRq q)),
+     TensorPowDec t (RRq q), Random (Cyc t m (Zq q)),
+     TensorGaussian t Double, TensorGSqNorm t Double, TensorGSqNorm t Int64,
+     FunctorCyc (Cyc t m) Double Double, -- TODO: REMOVE?
+     C.CRTElt t Int64, C.CRTElt t (Zq q), C.CRTElt t Double,
+     IFElt t (Zq q), IFElt t (RRq q)))
 
 -- | Yield a list of challenge names by getting all directory contents
 -- and filtering on all directories whose names start with "chall".

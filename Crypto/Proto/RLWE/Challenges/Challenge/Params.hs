@@ -14,7 +14,7 @@ import qualified Crypto.Proto.RLWE.Challenges.RLWRParams as Crypto.Proto.RLWE.Ch
 data Params = Cparams{cparams :: (Crypto.Proto.RLWE.Challenges.ContParams)}
             | Dparams{dparams :: (Crypto.Proto.RLWE.Challenges.DiscParams)}
             | Rparams{rparams :: (Crypto.Proto.RLWE.Challenges.RLWRParams)}
-            deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+              deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 get'cparams x
  = case x of
      Cparams cparams -> Prelude'.Just cparams

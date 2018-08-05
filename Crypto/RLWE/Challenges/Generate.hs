@@ -13,6 +13,7 @@ Generates challenges in non-legacy proto format.
 
 {-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MonoLocalBinds        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RebindableSyntax      #-}
@@ -119,14 +120,14 @@ genChallengeU pt cp (BA beaconEpoch beaconOffset) = do
   return $ CU chall insts
 
 -- | Generate an instance for the given parameters.
-genInstanceU :: forall t . (EntailTensor t)
+genInstanceU :: forall t . EntailTensor t
   => Proxy t -> Params -> ChallengeID -> InstanceID -> BS.ByteString -> InstanceU
 
 genInstanceU _ (Cparams params@ContParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [C.Sample t m (Zq q) (RRq q)]) <- instanceCont svar $ fromIntegral numSamples
+      (s', samples' :: [C.Sample (Cyc t m) (Zq q) (RRq q)]) <- instanceCont svar $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleContProduct <$> toProto samples'
       return $ IC s'' InstanceContProduct{..}) \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
@@ -135,7 +136,7 @@ genInstanceU _ (Dparams params@DiscParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [D.Sample t m (Zq q)]) <- instanceDisc svar $ fromIntegral numSamples
+      (s', samples' :: [D.Sample (Cyc t m) (Zq q)]) <- instanceDisc svar $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleDiscProduct <$> toProto samples'
       return $ ID s'' InstanceDiscProduct{..}) \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
@@ -144,7 +145,7 @@ genInstanceU _ (Rparams params@RLWRParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) -> reify p (\(_::Proxy p) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [R.Sample t m (Zq q) (Zq p)]) <- instanceRLWR $ fromIntegral numSamples
+      (s', samples' :: [R.Sample (Cyc t m) (Zq q) (Zq p)]) <- instanceRLWR $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleRLWRProduct <$> toProto samples'
       return $ IR s'' InstanceRLWRProduct{..})
@@ -190,9 +191,11 @@ writeInstanceU path challName iu = do
 -- | Generate a continuous RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceCont :: (C.RLWECtx t m zq rrq, Random zq, Random (LiftOf rrq),
+instanceCont :: (C.RLWECtx (Cyc t m) zq rrq, Random zq, Random (LiftOf rrq),
+                 GaussianCyc (Cyc t m (LiftOf rrq)),
+                 Reduce (Cyc t m (LiftOf rrq)) (Cyc t m rrq),
                  OrdFloat (LiftOf rrq), MonadRandom rnd, ToRational v)
-  => v -> Int -> rnd (Cyc t m zq, [C.Sample t m zq rrq])
+  => v -> Int -> rnd (Cyc t m zq, [C.Sample (Cyc t m) zq rrq])
 instanceCont svar num = do
   s <- getRandom
   samples <- replicateM num $ C.sample svar s
@@ -201,8 +204,9 @@ instanceCont svar num = do
 -- | Generate a discrete RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceDisc :: (D.RLWECtx t m zq, Random zq, MonadRandom rnd, ToRational v)
-  => v -> Int -> rnd (Cyc t m zq, [D.Sample t m zq])
+instanceDisc :: (D.RLWECtx (Cyc t m) zq, RoundedGaussianCyc (Cyc t m) (LiftOf zq), Random zq,
+                 MonadRandom rnd, ToRational v)
+  => v -> Int -> rnd (Cyc t m zq, [D.Sample (Cyc t m) zq])
 instanceDisc svar num = do
   s <- getRandom
   samples <- replicateM num $ D.sample svar s
@@ -211,8 +215,8 @@ instanceDisc svar num = do
 -- | Generate a discrete RLWR instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceRLWR :: (R.RLWRCtx t m zq zp, Random zq, MonadRandom rnd)
-  => Int -> rnd (Cyc t m zq, [R.Sample t m zq zp])
+instanceRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Random zq, MonadRandom rnd)
+  => Int -> rnd (Cyc t m zq, [R.Sample (Cyc t m) zq zp])
 instanceRLWR num = do
   s <- getRandom
   samples <- replicateM num $ R.sample s

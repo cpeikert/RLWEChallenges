@@ -10,7 +10,7 @@ import qualified Text.ProtocolBuffers.Header as P'
 
 data ContParams = ContParams{m :: !(P'.Int32), q :: !(P'.Int64), svar :: !(P'.Double), bound :: !(P'.Double),
                              numSamples :: !(P'.Int32)}
-                deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable ContParams where
   mergeAppend (ContParams x'1 x'2 x'3 x'4 x'5) (ContParams y'1 y'2 y'3 y'4 y'5)

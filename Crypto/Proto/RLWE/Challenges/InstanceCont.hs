@@ -13,7 +13,7 @@ import qualified Crypto.Proto.RLWE.SampleCont as Crypto.Proto.RLWE (SampleCont)
 data InstanceCont = InstanceCont{challengeID :: !(P'.Int32), instanceID :: !(P'.Int32),
                                  params :: !(Crypto.Proto.RLWE.Challenges.ContParams),
                                  samples :: !(P'.Seq Crypto.Proto.RLWE.SampleCont)}
-                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+                    deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable InstanceCont where
   mergeAppend (InstanceCont x'1 x'2 x'3 x'4) (InstanceCont y'1 y'2 y'3 y'4)

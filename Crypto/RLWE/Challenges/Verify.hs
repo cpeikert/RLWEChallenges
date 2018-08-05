@@ -33,7 +33,6 @@ import Crypto.RLWE.Challenges.Common
 import Crypto.RLWE.Challenges.Generate
 
 import           Crypto.Lol
-import           Crypto.Lol.Cyclotomic.UCyc
 import qualified Crypto.Lol.RLWE.RLWR        as R
 import qualified Crypto.Lol.RLWE.Continuous as C
 import qualified Crypto.Lol.RLWE.Discrete   as D
@@ -247,6 +246,9 @@ checkParamsEq data' param expected actual =
     data' ++ ": " ++ param ++ " mismatch. Expected " ++
     show expected ++ " but got " ++ show actual
 
+maximumCycDec :: (Additive r, Ord r, FoldableCyc (Cyc t m) r) => Cyc t m r -> r
+maximumCycDec c = foldrCyc (Just Dec) (\a b -> max a b) zero c
+
 -- | Outputs whether or not we successfully regenerated this instance from the DRBG seed.
 regenInstance :: forall t mon . (EntailTensor t, MonadError String mon)
   => Proxy t -> InstanceU -> mon Bool
@@ -259,12 +261,12 @@ regenInstance _ (IC (SecretProduct _ _ _ _ seed s) InstanceContProduct{..}) =
       (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
       reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
-        let (expectedS, expectedSamples :: [C.Sample t m (Zq q) (RRq q)]) =
+        let (expectedS, expectedSamples :: [C.Sample (Cyc t m) (Zq q) (RRq q)]) =
               flip evalRand g $ instanceCont svar (fromIntegral numSamples)
             csampleEq (a,b) (a',b') =
-              (a == a') && maximum (fmapDec abs $ lift $ b-b') < 2 ^- (-20)
+              (a == a') && maximumCycDec (fmapDec abs $ liftAny $ b-b') < 2 ^- (-20)
         s' :: Cyc t m (Zq q) <- fromProto s
-        samples' :: [C.Sample _ _ _ (RRq q)] <- fromProto $
+        samples' :: [C.Sample _ _ (RRq q)] <- fromProto $
           fmap (\(SampleContProduct a b) -> (a,b)) samples
         return $ (expectedS == s') && (and $ zipWith csampleEq expectedSamples samples'))
           \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
@@ -274,7 +276,7 @@ regenInstance _ (ID (SecretProduct _ _ _ _ seed s) InstanceDiscProduct{..}) =
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
       g :: CryptoRand InstDRBG <- either (throwError . show) return $ newGen $ BS.toStrict seed
-      let (expectedS, expectedSamples :: [D.Sample t m (Zq q)]) =
+      let (expectedS, expectedSamples :: [D.Sample (Cyc t m) (Zq q)]) =
             flip evalRand g $ instanceDisc svar (fromIntegral numSamples)
       s' :: Cyc t m (Zq q) <- fromProto s
       samples' <- fromProto $ fmap (\(SampleDiscProduct a b) -> (a,b)) samples
@@ -287,10 +289,10 @@ regenInstance _ (IR (SecretProduct _ _ _ _ seed s) InstanceRLWRProduct{..}) =
     reify (fromIntegral q :: Int64) (\(_::Proxy q) ->
       reify (fromIntegral p :: Int64) (\(_::Proxy p) -> (do
         g :: CryptoRand InstDRBG <- either (throwError . show) return $ newGen $ BS.toStrict seed
-        let (expectedS, expectedSamples :: [R.Sample t m (Zq q) (Zq p)]) =
+        let (expectedS, expectedSamples :: [R.Sample (Cyc t m) (Zq q) (Zq p)]) =
               flip evalRand g $ instanceRLWR (fromIntegral numSamples)
         s' :: Cyc t m (Zq q) <- fromProto s
-        samples' :: [R.Sample _ _ _ (Zq p)] <- fromProto $
+        samples' :: [R.Sample _ _ (Zq p)] <- fromProto $
           fmap (\(SampleRLWRProduct a b) -> (a,b)) samples
         return $ (expectedS == s') && (expectedSamples == samples'))
           \\ proxy entailTensor (Proxy::Proxy '(t,m,q))
@@ -304,7 +306,7 @@ verifyInstanceU _ (IC (SecretProduct _ _ _ _ _ s) InstanceContProduct{..}) =
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
       s' :: Cyc t m (Zq q) <- fromProto s
-      samples' :: [C.Sample _ _ _ (RRq q)] <- fromProto $
+      samples' :: [C.Sample _ _ (RRq q)] <- fromProto $
         fmap (\(SampleContProduct a b) -> (a,b)) samples
       throwErrorUnless (validInstanceCont bound s' samples')
         "A continuous RLWE sample exceeded the error bound.")
@@ -326,7 +328,7 @@ verifyInstanceU _ (IR (SecretProduct _ _ _ _ _ s) InstanceRLWRProduct{..}) =
     reify (fromIntegral q :: Int64) (\(_::Proxy q) ->
       reify (fromIntegral p :: Int64) (\(_::Proxy p) -> (do
         s' :: Cyc t m (Zq q) <- fromProto s
-        samples' :: [R.Sample _ _ _ (Zq p)] <- fromProto $
+        samples' :: [R.Sample _ _ (Zq p)] <- fromProto $
           fmap (\(SampleRLWRProduct a b) -> (a,b)) samples
         throwErrorUnless (validInstanceRLWR s' samples')
           "An RLWR sample was invalid.")
@@ -344,23 +346,25 @@ readBeacon path time = do
 
 -- | Test if the 'gSqNorm' of the error for each RLWE sample in the
 -- instance (given the secret) is less than the given bound.
-validInstanceCont ::
-  (C.RLWECtx t m zq rrq, Ord (LiftOf rrq), Ring (LiftOf rrq))
-  => LiftOf rrq -> Cyc t m zq -> [C.Sample t m zq rrq] -> Bool
+validInstanceCont :: (LiftCyc (Cyc t m) rrq,
+                      C.RLWECtx (Cyc t m) zq rrq, GSqNormCyc (Cyc t m) (LiftOf rrq),
+                      Ord (LiftOf rrq), Ring (LiftOf rrq))
+  => LiftOf rrq -> Cyc t m zq -> [C.Sample (Cyc t m) zq rrq] -> Bool
 validInstanceCont bound s = all ((bound > ) . C.errorGSqNorm s)
 
 -- | Test if the 'gSqNorm' of the error for each RLWE sample in the
 -- instance (given the secret) is less than the given bound.
-validInstanceDisc :: (D.RLWECtx t m zq)
-                     => LiftOf zq -> Cyc t m zq -> [D.Sample t m zq] -> Bool
+validInstanceDisc :: (D.RLWECtx (Cyc t m) zq, LiftCyc (Cyc t m) zq,
+                      Ord (LiftOf zq), GSqNormCyc (Cyc t m) (LiftOf zq))
+  => LiftOf zq -> Cyc t m zq -> [D.Sample (Cyc t m) zq] -> Bool
 validInstanceDisc bound s = all ((bound > ) . D.errorGSqNorm s)
 
 -- | Test if the given RLWR instance is valid for the given secret.
-validInstanceRLWR :: (R.RLWRCtx t m zq zp, Eq zp)
-  => Cyc t m zq -> [R.Sample t m zq zp] -> Bool
+validInstanceRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Eq zp, Eq (Cyc t m zp))
+  => Cyc t m zq -> [R.Sample (Cyc t m) zq zp] -> Bool
 validInstanceRLWR s = let s' = adviseCRT s in all (validSampleRLWR s')
 
 -- | Test if the given RLWR sample is valid for the given secret.
-validSampleRLWR :: (R.RLWRCtx t m zq zp, Eq zp)
-  => Cyc t m zq -> R.Sample t m zq zp -> Bool
+validSampleRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Eq zp, Eq (Cyc t m zp))
+  => Cyc t m zq -> R.Sample (Cyc t m) zq zp -> Bool
 validSampleRLWR s (a,b) = b == R.roundedProd s a

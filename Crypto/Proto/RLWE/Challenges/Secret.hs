@@ -11,7 +11,7 @@ import qualified Crypto.Proto.Lol.Rq as Crypto.Proto.Lol (Rq)
 
 data Secret = Secret{challengeID :: !(P'.Int32), instanceID :: !(P'.Int32), m :: !(P'.Int32), q :: !(P'.Int64),
                      seed :: !(P'.ByteString), s :: !(Crypto.Proto.Lol.Rq)}
-            deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+              deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable Secret where
   mergeAppend (Secret x'1 x'2 x'3 x'4 x'5 x'6) (Secret y'1 y'2 y'3 y'4 y'5 y'6)

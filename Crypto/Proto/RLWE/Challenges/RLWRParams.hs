@@ -9,7 +9,7 @@ import qualified Data.Data as Prelude'
 import qualified Text.ProtocolBuffers.Header as P'
 
 data RLWRParams = RLWRParams{m :: !(P'.Int32), q :: !(P'.Int64), p :: !(P'.Int64), numSamples :: !(P'.Int32)}
-                deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
+                  deriving (Prelude'.Show, Prelude'.Eq, Prelude'.Ord, Prelude'.Typeable, Prelude'.Data, Prelude'.Generic)
 
 instance P'.Mergeable RLWRParams where
   mergeAppend (RLWRParams x'1 x'2 x'3 x'4) (RLWRParams y'1 y'2 y'3 y'4)
