@@ -29,7 +29,7 @@ description:
 
 source-repository head
   type: git
-  location: https://github.com/cpeikert/Lol
+  location: https://github.com/cpeikert/RLWEChallenges
 
 library
   default-language: Haskell2010
