@@ -191,9 +191,8 @@ writeInstanceU path challName iu = do
 -- | Generate a continuous RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceCont :: (C.RLWECtx (Cyc t m) zq rrq, Random zq, Random (LiftOf rrq),
-                 GaussianCyc (Cyc t m (LiftOf rrq)),
-                 Reduce (Cyc t m (LiftOf rrq)) (Cyc t m rrq),
+instanceCont :: (C.RLWECtx (Cyc t m) zq rrq, Random zq, Random (LiftOf rrq), Random (Cyc t m zq),
+                 GaussianCyc (Cyc t m (LiftOf rrq)), Reduce (Cyc t m (LiftOf rrq)) (Cyc t m rrq),
                  OrdFloat (LiftOf rrq), MonadRandom rnd, ToRational v)
   => v -> Int -> rnd (Cyc t m zq, [C.Sample (Cyc t m) zq rrq])
 instanceCont svar num = do
@@ -204,9 +203,9 @@ instanceCont svar num = do
 -- | Generate a discrete RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceDisc :: (D.RLWECtx (Cyc t m) zq, RoundedGaussianCyc (Cyc t m) (LiftOf zq), Random zq,
-                 MonadRandom rnd, ToRational v)
-  => v -> Int -> rnd (Cyc t m zq, [D.Sample (Cyc t m) zq])
+instanceDisc :: (D.RLWECtx (Cyc t m) zq, RoundedGaussianCyc (Cyc t m) (LiftOf zq),
+                 Random zq, Random (Cyc t m zq), MonadRandom rnd, ToRational v)
+  => v -> Int -> rnd (CycT m zq, [D.Sample (CycT m) zq])
 instanceDisc svar num = do
   s <- getRandom
   samples <- replicateM num $ D.sample svar s
