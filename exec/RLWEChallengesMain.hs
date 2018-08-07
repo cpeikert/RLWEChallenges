@@ -14,7 +14,7 @@ import System.Exit
 import System.IO
 
 import Crypto.RLWE.Challenges.Beacon
-import Crypto.RLWE.Challenges.Common   (InstanceID, printANSI, EntailTensor(..))
+import Crypto.RLWE.Challenges.Common   (InstanceID, printANSI)
 import Crypto.RLWE.Challenges.Generate
 import Crypto.RLWE.Challenges.Params
 import Crypto.RLWE.Challenges.Suppress
@@ -24,13 +24,9 @@ import Crypto.Lol.Cyclotomic.Tensor.CPP
 
 import Data.Constraint
 import Data.Functor.Trans.Tagged
-import Data.Proxy
 
 -- the Tensor implementation used to generate/verify challenges
 type T = CT
-
-instance EntailTensor T where
-  entailTensor = tag $ Sub Dict
 
 data MainOpts =
   MainOpts
@@ -94,10 +90,10 @@ generate MainOpts{..} GenOpts{..} _ = do
     else printANSI Yellow "WARNING: Reveal time is in the past!"
   paramContents <- readFile optParamsFile
   let params = parseChallParams paramContents optNumInstances
-  generateMain (Proxy::Proxy T) optChallDir initBeacon params
+  generateMain optChallDir initBeacon params
 
 suppress :: MainOpts -> NullOpts -> [String] -> IO ()
 suppress MainOpts{..} _ _ = suppressMain optChallDir
 
 verify :: MainOpts -> NullOpts -> [String] -> IO ()
-verify MainOpts{..} _ _ = verifyMain (Proxy::Proxy T) optChallDir
+verify MainOpts{..} _ _ = verifyMain optChallDir

@@ -29,6 +29,7 @@ import qualified Crypto.Lol.Types as RRq
 import           Crypto.Lol.Types.IFunctor
 import           Crypto.Lol.Types.Proto
 import           Crypto.Lol.Cyclotomic.CycRep as C
+import           Crypto.Lol.Cyclotomic.Tensor.CPP
 
 import Crypto.Proto.RLWE.Challenges.Challenge
 import Crypto.Proto.RLWE.Challenges.InstanceContProduct
@@ -79,21 +80,7 @@ type Zq q = ZqBasic q Int64
 -- | Concrete type used to generate and verify instances
 type RRq q = RRq.RRq q Double
 
--- | Contains the necessary entailments to allow generation and verification
--- using reified moduli and cyclotomic indices.
-class (TensorPowDec t (Complex Double), TensorPowDec t Double, TensorPowDec t Int64)
-  => EntailTensor t where
-  entailTensor :: Tagged '(t,m,q) ((Reifies q Int64, Fact m) :-
-    (ProtoType (t m (RRq q)) ~ KqProduct,
-     ProtoType (t m (Zq q))  ~ RqProduct,
-     Protoable ((Cyc t) m (Zq q)),
-     Eq ((Cyc t) m (Zq q)),
-     Protoable ((Cyc t) m (RRq q)),
-     TensorPowDec t (RRq q), Random (Cyc t m (Zq q)),
-     TensorGaussian t Double, TensorGSqNorm t Double, TensorGSqNorm t Int64,
-     FunctorCyc (Cyc t m) Double Double, -- TODO: REMOVE?
-     C.CRTElt t Int64, C.CRTElt t (Zq q), C.CRTElt t Double,
-     IFElt t (Zq q), IFElt t (RRq q)))
+type CycT = Cyc CT
 
 -- | Yield a list of challenge names by getting all directory contents
 -- and filtering on all directories whose names start with "chall".

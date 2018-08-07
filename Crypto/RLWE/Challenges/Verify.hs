@@ -82,13 +82,13 @@ import System.Directory    (doesFileExist)
 
 -- | Verifies all instances in the challenge tree, given the path to the
 -- root of the tree.
-verifyMain :: (EntailTensor t) => Proxy t -> FilePath -> IO ()
-verifyMain pt path = do
+verifyMain :: FilePath -> IO ()
+verifyMain path = do
   -- get a list of challenges to reveal
   challNames' <- challengeList path
   let challNames = sort challNames'
 
-  beaconAddrs <- sequence <$> mapM (readAndVerifyChallenge pt path) challNames
+  beaconAddrs <- sequence <$> mapM (readAndVerifyChallenge path) challNames
 
   -- verify that all beacon addresses are distinct
   case beaconAddrs of
@@ -96,7 +96,7 @@ verifyMain pt path = do
       _ <- printPassFail "Checking for distinct beacon addresses... " "DISTINCT"
         $ throwErrorIf (length (nub addrs) /= length addrs) "NOT DISTINCT"
       putStrLn "\nAttempting to regenerate challenges from random seeds. This will take awhile..."
-      regens <- sequence <$> mapM (regenChallenge pt path) challNames
+      regens <- sequence <$> mapM (regenChallenge path) challNames
       when (isNothing regens) $ printANSI Yellow "NOTE: one or more instances could not be\n \
         \regenerated from the provided PRG seed. This is NON-FATAL,\n \
         \and is likely due to the use of a different compiler/platform\n \
@@ -105,23 +105,21 @@ verifyMain pt path = do
 
 -- | Reads a challenge and verifies all instances.
 -- Returns the beacon address for the challenge.
-readAndVerifyChallenge :: (EntailTensor t, MonadIO m)
-  => Proxy t -> FilePath -> String -> m (Maybe BeaconAddr)
-readAndVerifyChallenge pt path challName =
+readAndVerifyChallenge :: MonadIO m => FilePath -> String -> m (Maybe BeaconAddr)
+readAndVerifyChallenge path challName =
   printPassFail ("Verifying " ++ challName) "VERIFIED" $ do
     (ba, insts) <- readChallenge path challName
-    mapM_ (verifyInstanceU pt) insts
+    mapM_ verifyInstanceU insts
     return ba
 
 -- | Reads a challenge and attempts to regenerate all instances from the
 -- provided seed.
 -- Returns (Just ()) if regeneration succeeded for all instances.
-regenChallenge :: (EntailTensor t, MonadIO m)
-  => Proxy t -> FilePath -> String -> m (Maybe ())
-regenChallenge pt path challName = do
+regenChallenge :: MonadIO m => FilePath -> String -> m (Maybe ())
+regenChallenge path challName = do
   printPassWarn ("Regenerating " ++ challName ++ "... ") "VERIFIED" $ do
     (_, insts) <- readChallenge path challName
-    regens <- mapM (regenInstance pt) insts
+    regens <- mapM regenInstance insts
     unless (and regens) $ throwError "UNSUCCESSFUL"
 
 -- | Read a challenge from a file, outputting the beacon address and a
@@ -250,90 +248,81 @@ maximumCycDec :: (Additive r, Ord r, FoldableCyc (Cyc t m) r) => Cyc t m r -> r
 maximumCycDec c = foldrCyc (Just Dec) (\a b -> max a b) zero c
 
 -- | Outputs whether or not we successfully regenerated this instance from the DRBG seed.
-regenInstance :: forall t mon . (EntailTensor t, MonadError String mon)
-  => Proxy t -> InstanceU -> mon Bool
+regenInstance :: forall mon . MonadError String mon => InstanceU -> mon Bool
 -- as always with floating point arithmetic, nothing is perfect (even
 -- deterministic generation of instances).
 -- the secret and a_i are discrete, so they should match exactly.
 -- the b_i shouldn't be too far off.
-regenInstance _ (IC (SecretProduct _ _ _ _ seed s) InstanceContProduct{..}) =
+regenInstance (IC (SecretProduct _ _ _ _ seed s) InstanceContProduct{..}) =
   let ContParams {..} = params
       (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
       reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
-        let (expectedS, expectedSamples :: [C.Sample (Cyc t m) (Zq q) (RRq q)]) =
+        let (expectedS, expectedSamples :: [C.Sample (CycT m) (Zq q) (RRq q)]) =
               flip evalRand g $ instanceCont svar (fromIntegral numSamples)
             csampleEq (a,b) (a',b') =
               (a == a') && maximumCycDec (fmapDec abs $ liftAny $ b-b') < 2 ^- (-20)
-        s' :: Cyc t m (Zq q) <- fromProto s
+        s' :: CycT m (Zq q) <- fromProto s
         samples' :: [C.Sample _ _ (RRq q)] <- fromProto $
           fmap (\(SampleContProduct a b) -> (a,b)) samples
-        return $ (expectedS == s') && (and $ zipWith csampleEq expectedSamples samples'))
-          \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+        return $ (expectedS == s') && (and $ zipWith csampleEq expectedSamples samples'))))
 
-regenInstance _ (ID (SecretProduct _ _ _ _ seed s) InstanceDiscProduct{..}) =
+regenInstance (ID (SecretProduct _ _ _ _ seed s) InstanceDiscProduct{..}) =
   let DiscParams {..} = params
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
       g :: CryptoRand InstDRBG <- either (throwError . show) return $ newGen $ BS.toStrict seed
-      let (expectedS, expectedSamples :: [D.Sample (Cyc t m) (Zq q)]) =
+      let (expectedS, expectedSamples :: [D.Sample (CycT m) (Zq q)]) =
             flip evalRand g $ instanceDisc svar (fromIntegral numSamples)
-      s' :: Cyc t m (Zq q) <- fromProto s
+      s' :: CycT m (Zq q) <- fromProto s
       samples' <- fromProto $ fmap (\(SampleDiscProduct a b) -> (a,b)) samples
-      return $ (expectedS == s') && (expectedSamples == samples'))
-        \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+      return $ (expectedS == s') && (expectedSamples == samples'))))
 
-regenInstance _ (IR (SecretProduct _ _ _ _ seed s) InstanceRLWRProduct{..}) =
+regenInstance (IR (SecretProduct _ _ _ _ seed s) InstanceRLWRProduct{..}) =
   let RLWRParams {..} = params
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) ->
       reify (fromIntegral p :: Int64) (\(_::Proxy p) -> (do
         g :: CryptoRand InstDRBG <- either (throwError . show) return $ newGen $ BS.toStrict seed
-        let (expectedS, expectedSamples :: [R.Sample (Cyc t m) (Zq q) (Zq p)]) =
+        let (expectedS, expectedSamples :: [R.Sample (CycT m) (Zq q) (Zq p)]) =
               flip evalRand g $ instanceRLWR (fromIntegral numSamples)
-        s' :: Cyc t m (Zq q) <- fromProto s
+        s' :: CycT m (Zq q) <- fromProto s
         samples' :: [R.Sample _ _ (Zq p)] <- fromProto $
           fmap (\(SampleRLWRProduct a b) -> (a,b)) samples
-        return $ (expectedS == s') && (expectedSamples == samples'))
-          \\ proxy entailTensor (Proxy::Proxy '(t,m,q))
-          \\ proxy entailTensor (Proxy::Proxy '(t,m,p)))))
+        return $ (expectedS == s') && (expectedSamples == samples')))))
 
 -- | Verify an 'InstanceU'.
-verifyInstanceU :: forall t mon . (EntailTensor t, MonadError String mon) => Proxy t -> InstanceU -> mon ()
+verifyInstanceU :: forall mon . MonadError String mon => InstanceU -> mon ()
 
-verifyInstanceU _ (IC (SecretProduct _ _ _ _ _ s) InstanceContProduct{..}) =
+verifyInstanceU (IC (SecretProduct _ _ _ _ _ s) InstanceContProduct{..}) =
   let ContParams {..} = params
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
-      s' :: Cyc t m (Zq q) <- fromProto s
+      s' :: CycT m (Zq q) <- fromProto s
       samples' :: [C.Sample _ _ (RRq q)] <- fromProto $
         fmap (\(SampleContProduct a b) -> (a,b)) samples
       throwErrorUnless (validInstanceCont bound s' samples')
-        "A continuous RLWE sample exceeded the error bound.")
-        \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+        "A continuous RLWE sample exceeded the error bound.")))
 
-verifyInstanceU _ (ID (SecretProduct _ _ _ _ _ s) InstanceDiscProduct{..}) =
+verifyInstanceU (ID (SecretProduct _ _ _ _ _ s) InstanceDiscProduct{..}) =
   let DiscParams {..} = params
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) -> (do
-      s' :: Cyc t m (Zq q) <- fromProto s
+      s' :: CycT m (Zq q) <- fromProto s
       samples' <- fromProto $ fmap (\(SampleDiscProduct a b) -> (a,b)) samples
       throwErrorUnless (validInstanceDisc bound s' samples')
-        "A discrete RLWE sample exceeded the error bound.")
-        \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+        "A discrete RLWE sample exceeded the error bound.")))
 
-verifyInstanceU _ (IR (SecretProduct _ _ _ _ _ s) InstanceRLWRProduct{..}) =
+verifyInstanceU (IR (SecretProduct _ _ _ _ _ s) InstanceRLWRProduct{..}) =
   let RLWRParams {..} = params
   in reifyFactI (fromIntegral m) (\(_::proxy m) ->
     reify (fromIntegral q :: Int64) (\(_::Proxy q) ->
       reify (fromIntegral p :: Int64) (\(_::Proxy p) -> (do
-        s' :: Cyc t m (Zq q) <- fromProto s
+        s' :: CycT m (Zq q) <- fromProto s
         samples' :: [R.Sample _ _ (Zq p)] <- fromProto $
           fmap (\(SampleRLWRProduct a b) -> (a,b)) samples
         throwErrorUnless (validInstanceRLWR s' samples')
-          "An RLWR sample was invalid.")
-          \\ proxy entailTensor (Proxy::Proxy '(t,m,q))
-          \\ proxy entailTensor (Proxy::Proxy '(t,m,p)))))
+          "An RLWR sample was invalid."))))
 
 -- | Read an XML file for the beacon corresponding to the provided time.
 readBeacon :: (MonadIO m, MonadError String m)
@@ -346,25 +335,22 @@ readBeacon path time = do
 
 -- | Test if the 'gSqNorm' of the error for each RLWE sample in the
 -- instance (given the secret) is less than the given bound.
-validInstanceCont :: (LiftCyc (Cyc t m) rrq,
-                      C.RLWECtx (Cyc t m) zq rrq, GSqNormCyc (Cyc t m) (LiftOf rrq),
-                      Ord (LiftOf rrq), Ring (LiftOf rrq))
-  => LiftOf rrq -> Cyc t m zq -> [C.Sample (Cyc t m) zq rrq] -> Bool
+validInstanceCont :: (Fact m, Reifies q Int64)
+  => LiftOf (RRq q) -> CycT m (Zq q) -> [C.Sample (CycT m) (Zq q) (RRq q)] -> Bool
 validInstanceCont bound s = all ((bound > ) . C.errorGSqNorm s)
 
 -- | Test if the 'gSqNorm' of the error for each RLWE sample in the
 -- instance (given the secret) is less than the given bound.
-validInstanceDisc :: (D.RLWECtx (Cyc t m) zq, LiftCyc (Cyc t m) zq,
-                      Ord (LiftOf zq), GSqNormCyc (Cyc t m) (LiftOf zq))
-  => LiftOf zq -> Cyc t m zq -> [D.Sample (Cyc t m) zq] -> Bool
+validInstanceDisc :: (Fact m, Reifies q Int64)
+  => LiftOf (Zq q) -> CycT m (Zq q) -> [D.Sample (CycT m) (Zq q)] -> Bool
 validInstanceDisc bound s = all ((bound > ) . D.errorGSqNorm s)
 
 -- | Test if the given RLWR instance is valid for the given secret.
-validInstanceRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Eq zp, Eq (Cyc t m zp))
-  => Cyc t m zq -> [R.Sample (Cyc t m) zq zp] -> Bool
+validInstanceRLWR :: (Fact m, Reifies q Int64, Reifies p Int64)
+  => CycT m (Zq q) -> [R.Sample (CycT m) (Zq q) (Zq p)] -> Bool
 validInstanceRLWR s = let s' = adviseCRT s in all (validSampleRLWR s')
 
 -- | Test if the given RLWR sample is valid for the given secret.
-validSampleRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Eq zp, Eq (Cyc t m zp))
-  => Cyc t m zq -> R.Sample (Cyc t m) zq zp -> Bool
+validSampleRLWR :: (Fact m, Reifies q Int64, Reifies p Int64)
+  => CycT m (Zq q) -> R.Sample (CycT m) (Zq q) (Zq p) -> Bool
 validSampleRLWR s (a,b) = b == R.roundedProd s a

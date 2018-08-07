@@ -66,16 +66,16 @@ import Text.Printf
 
 -- | Generate and serialize challenges given the path to the root of the tree
 -- and an initial beacon address.
-generateMain :: (EntailTensor t) => Proxy t -> FilePath -> BeaconAddr -> [ChallengeParams] -> IO ()
-generateMain pt path beaconStart cps = do
+generateMain :: FilePath -> BeaconAddr -> [ChallengeParams] -> IO ()
+generateMain path beaconStart cps = do
   let len = length cps
       beaconAddrs = take len $ iterate nextBeaconAddr beaconStart
-  evalCryptoRandIO (zipWithM_ (genAndWriteChallenge pt path) cps beaconAddrs
+  evalCryptoRandIO (zipWithM_ (genAndWriteChallenge path) cps beaconAddrs
     :: RandT (CryptoRand HashDRBG) IO ())
 
-genAndWriteChallenge :: (MonadRandom m, MonadIO m, EntailTensor t)
-  => Proxy t -> FilePath -> ChallengeParams -> BeaconAddr -> m ()
-genAndWriteChallenge pt path cp ba@(BA _ _) = do
+genAndWriteChallenge :: (MonadRandom m, MonadIO m)
+  => FilePath -> ChallengeParams -> BeaconAddr -> m ()
+genAndWriteChallenge path cp ba@(BA _ _) = do
   let name = challengeName cp
   liftIO $ putStrLn $ "Generating challenge " ++ name
 
@@ -86,7 +86,7 @@ genAndWriteChallenge pt path cp ba@(BA _ _) = do
   -- isAvail <- isBeaconAvailable t
   -- when isAvail $ printANSI Red "Beacon is already available!"
 
-  chall <- genChallengeU pt cp ba
+  chall <- genChallengeU cp ba
   liftIO $ writeChallengeU path name chall
 
 -- | The name for each challenge directory.
@@ -105,9 +105,8 @@ challengeName params =
         if null annotation then "" else "-" ++ annotation
 
 -- | Generate a challenge with the given parameters.
-genChallengeU :: (MonadRandom m, EntailTensor t)
-  => Proxy t -> ChallengeParams -> BeaconAddr -> m ChallengeU
-genChallengeU pt cp (BA beaconEpoch beaconOffset) = do
+genChallengeU :: MonadRandom m => ChallengeParams -> BeaconAddr -> m ChallengeU
+genChallengeU cp (BA beaconEpoch beaconOffset) = do
   let challengeID = challID cp
       params' = toProtoParams cp
       numInstances = P.numInstances cp
@@ -116,41 +115,38 @@ genChallengeU pt cp (BA beaconEpoch beaconOffset) = do
       instIDs = take numInsts [0..]
       seedLen = T.proxy genSeedLength (Proxy::Proxy InstDRBG)
   seeds <- replicateM numInsts (BS.pack <$> replicateM seedLen getRandom)
-  let insts = zipWith (genInstanceU pt params' challengeID) instIDs seeds
+  let insts = zipWith (genInstanceU params' challengeID) instIDs seeds
   return $ CU chall insts
 
 -- | Generate an instance for the given parameters.
-genInstanceU :: forall t . EntailTensor t
-  => Proxy t -> Params -> ChallengeID -> InstanceID -> BS.ByteString -> InstanceU
+genInstanceU :: Params -> ChallengeID -> InstanceID -> BS.ByteString -> InstanceU
 
-genInstanceU _ (Cparams params@ContParams{..}) challengeID instanceID seed =
+genInstanceU (Cparams params@ContParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [C.Sample (Cyc t m) (Zq q) (RRq q)]) <- instanceCont svar $ fromIntegral numSamples
+      (s', samples' :: [C.Sample (CycT m) (Zq q) (RRq q)]) <- instanceCont svar $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleContProduct <$> toProto samples'
-      return $ IC s'' InstanceContProduct{..}) \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+      return $ IC s'' InstanceContProduct{..})))
 
-genInstanceU _ (Dparams params@DiscParams{..}) challengeID instanceID seed =
+genInstanceU (Dparams params@DiscParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [D.Sample (Cyc t m) (Zq q)]) <- instanceDisc svar $ fromIntegral numSamples
+      (s', samples' :: [D.Sample (CycT m) (Zq q)]) <- instanceDisc svar $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleDiscProduct <$> toProto samples'
-      return $ ID s'' InstanceDiscProduct{..}) \\ proxy entailTensor (Proxy::Proxy '(t,m,q))))
+      return $ ID s'' InstanceDiscProduct{..})))
 
-genInstanceU _ (Rparams params@RLWRParams{..}) challengeID instanceID seed =
+genInstanceU (Rparams params@RLWRParams{..}) challengeID instanceID seed =
   let (Right (g :: CryptoRand InstDRBG)) = newGen $ BS.toStrict seed
   in flip evalRand g $ reify q (\(_::Proxy q) -> reify p (\(_::Proxy p) ->
     reifyFactI (fromIntegral m) (\(_::proxy m) -> (do
-      (s', samples' :: [R.Sample (Cyc t m) (Zq q) (Zq p)]) <- instanceRLWR $ fromIntegral numSamples
+      (s', samples' :: [R.Sample (CycT m) (Zq q) (Zq p)]) <- instanceRLWR $ fromIntegral numSamples
       let s'' = SecretProduct{s = toProto s', ..}
           samples = uncurry SampleRLWRProduct <$> toProto samples'
-      return $ IR s'' InstanceRLWRProduct{..})
-        \\ proxy entailTensor (Proxy::Proxy '(t,m,q))
-        \\ proxy entailTensor (Proxy::Proxy '(t,m,p)))))
+      return $ IR s'' InstanceRLWRProduct{..}))))
 
 -- | Convert the parsed 'ChallengeParams' into serializable 'Params'
 toProtoParams :: ChallengeParams -> Params
@@ -191,10 +187,8 @@ writeInstanceU path challName iu = do
 -- | Generate a continuous RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceCont :: (C.RLWECtx (Cyc t m) zq rrq, Random zq, Random (LiftOf rrq), Random (Cyc t m zq),
-                 GaussianCyc (Cyc t m (LiftOf rrq)), Reduce (Cyc t m (LiftOf rrq)) (Cyc t m rrq),
-                 OrdFloat (LiftOf rrq), MonadRandom rnd, ToRational v)
-  => v -> Int -> rnd (Cyc t m zq, [C.Sample (Cyc t m) zq rrq])
+instanceCont :: (Fact m, Reifies q Int64, MonadRandom rnd, ToRational v)
+  => v -> Int -> rnd (CycT m (Zq q), [C.Sample (CycT m) (Zq q) (RRq q)])
 instanceCont svar num = do
   s <- getRandom
   samples <- replicateM num $ C.sample svar s
@@ -203,9 +197,8 @@ instanceCont svar num = do
 -- | Generate a discrete RLWE instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceDisc :: (D.RLWECtx (Cyc t m) zq, RoundedGaussianCyc (Cyc t m) (LiftOf zq),
-                 Random zq, Random (Cyc t m zq), MonadRandom rnd, ToRational v)
-  => v -> Int -> rnd (CycT m zq, [D.Sample (CycT m) zq])
+instanceDisc :: (Fact m, Reifies q Int64, MonadRandom rnd, ToRational v)
+  => v -> Int -> rnd (CycT m (Zq q), [D.Sample (CycT m) (Zq q)])
 instanceDisc svar num = do
   s <- getRandom
   samples <- replicateM num $ D.sample svar s
@@ -214,10 +207,9 @@ instanceDisc svar num = do
 -- | Generate a discrete RLWR instance along with its (uniformly
 -- random) secret, using the given scaled variance and number of
 -- desired samples.
-instanceRLWR :: (R.RLWRCtx (Cyc t m) zq zp, Random zq, MonadRandom rnd)
-  => Int -> rnd (Cyc t m zq, [R.Sample (Cyc t m) zq zp])
+instanceRLWR :: (Fact m, Reifies p Int64, Reifies q Int64, MonadRandom rnd)
+  => Int -> rnd (CycT m (Zq q), [R.Sample (CycT m) (Zq q) (Zq p)])
 instanceRLWR num = do
   s <- getRandom
   samples <- replicateM num $ R.sample s
   return (s, samples)
-
