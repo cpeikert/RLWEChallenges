@@ -23,12 +23,9 @@ module Crypto.RLWE.Challenges.Common where
 
 import Crypto.RLWE.Challenges.Beacon
 
-import           Crypto.Lol (Cyc, Fact, Lift', FunctorCyc)
+import           Crypto.Lol (Cyc)
 import           Crypto.Lol.Types     hiding (RRq)
 import qualified Crypto.Lol.Types as RRq
-import           Crypto.Lol.Types.IFunctor
-import           Crypto.Lol.Types.Proto
-import           Crypto.Lol.Cyclotomic.CycRep as C
 import           Crypto.Lol.Cyclotomic.Tensor.CPP
 
 import Crypto.Proto.RLWE.Challenges.Challenge
@@ -37,21 +34,13 @@ import Crypto.Proto.RLWE.Challenges.InstanceDiscProduct
 import Crypto.Proto.RLWE.Challenges.InstanceRLWRProduct
 import Crypto.Proto.RLWE.Challenges.SecretProduct
 
-import Crypto.Proto.Lol.KqProduct
-import Crypto.Proto.Lol.RqProduct
-import Crypto.Lol.Cyclotomic.Tensor
-
 import Crypto.Random.DRBG
 
 import Control.Monad.Except
-import Control.Monad.Random
 
 import Data.ByteString.Lazy (unpack)
-import Data.Constraint
 import Data.Int
 import Data.Maybe
-import Data.Reflection hiding (D)
-import Data.Functor.Trans.Tagged
 
 import Net.Beacon
 
