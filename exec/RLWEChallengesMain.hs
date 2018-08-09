@@ -22,12 +22,6 @@ import Crypto.RLWE.Challenges.Verify
 
 import Crypto.Lol.Cyclotomic.Tensor.CPP
 
-import Data.Constraint
-import Data.Functor.Trans.Tagged
-
--- the Tensor implementation used to generate/verify challenges
-type T = CT
-
 data MainOpts =
   MainOpts
   { optChallDir :: FilePath -- ^ location of challenges
