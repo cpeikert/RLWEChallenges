@@ -19,11 +19,13 @@ Generates challenges in non-legacy proto format.
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Crypto.RLWE.Challenges.Generate
-(generateMain,genChallengeU
-,writeChallengeU
-,instanceCont, instanceDisc, instanceRLWR) where
+( generateMain, genChallengeU
+, writeChallengeU
+, instanceCont, instanceDisc, instanceRLWR
+) where
 
 import Crypto.RLWE.Challenges.Beacon
 import Crypto.RLWE.Challenges.Common
@@ -44,7 +46,7 @@ import Crypto.Proto.RLWE.Challenges.InstanceContProduct
 import Crypto.Proto.RLWE.Challenges.InstanceDiscProduct
 import Crypto.Proto.RLWE.Challenges.InstanceRLWRProduct
 import Crypto.Proto.RLWE.Challenges.RLWRParams
-import Crypto.Proto.RLWE.Challenges.SecretProduct           as S
+import Crypto.Proto.RLWE.Challenges.SecretProduct       as S
 import Crypto.Proto.RLWE.SampleContProduct
 import Crypto.Proto.RLWE.SampleDiscProduct
 import Crypto.Proto.RLWE.SampleRLWRProduct
@@ -57,8 +59,8 @@ import Control.Monad.Except
 import Control.Monad.Random
 
 import qualified Data.ByteString.Lazy as BS
-import Data.Reflection hiding (D)
-import qualified Data.Tagged as T
+import           Data.Reflection      hiding (D)
+import qualified Data.Tagged          as T
 
 import System.Directory (createDirectoryIfMissing)
 
@@ -152,11 +154,11 @@ genInstanceU (Rparams params@RLWRParams{..}) challengeID instanceID seed =
 toProtoParams :: ChallengeParams -> Params
 toProtoParams C{..} =
   reifyFactI (fromIntegral m) (\(_::proxy m) ->
-    let bound = proxy (C.errorBound svar eps) (Proxy::Proxy m)
+    let bound = C.errorBound @m svar eps
     in Cparams ContParams {..})
 toProtoParams D{..} =
   reifyFactI (fromIntegral m) (\(_::proxy m) ->
-    let bound = proxy (D.errorBound svar eps) (Proxy::Proxy m)
+    let bound = D.errorBound @m svar eps
     in Dparams DiscParams {..})
 toProtoParams R{..} = Rparams RLWRParams {..}
 
