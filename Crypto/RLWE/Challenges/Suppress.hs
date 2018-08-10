@@ -14,7 +14,7 @@ Suppresses the instance secret for the official challenge instance.
 {-# LANGUAGE FlexibleContexts #-}
 
 module Crypto.RLWE.Challenges.Suppress
-(suppressMain, getNistCert, writeBeaconXML, suppressChallenge) where
+(suppressMain, writeBeaconXML, suppressChallenge) where
 
 import Crypto.RLWE.Challenges.Beacon
 import Crypto.RLWE.Challenges.Common
@@ -26,20 +26,21 @@ import Control.Monad.State
 import Crypto.Lol.Types.Proto
 import Crypto.Proto.RLWE.Challenges.Challenge
 
-import Data.ByteString.Lazy (writeFile)
+import Data.ByteString.Lazy (readFile, writeFile)
 import Data.ByteString.Char8 (unpack)
-import Data.Maybe (isNothing)
+import Data.Maybe (catMaybes, isNothing)
 import Data.Time.Clock.POSIX
 
-import Data.Map             (Map, empty, insert, lookup)
+import Data.List (isSuffixOf)
+import Data.Map.Strict (Map, fromList, insert, lookup)
 
 import Net.Beacon
 import Network.HTTP.Client hiding (path)
-import Network.HTTP.Conduit (simpleHttp)
 
-import Prelude hiding (lookup, writeFile)
+import Prelude hiding (lookup, readFile, writeFile)
 
-import System.Directory (removeFile)
+import System.Directory (getDirectoryContents, removeFile)
+import System.FilePath.Posix ((</>))
 import System.Exit
 
 -- | Deletes the secret indicated by NIST beacon for each challenge in
@@ -49,17 +50,26 @@ suppressMain path = do
   -- get list of challenges
   challs <- challengeList path
 
+  -- load all local XML files first
+  st <- loadXML path
+
   -- suppress a secret from each challenge, collecting beacon records as we go
-  recs <- flip execStateT empty $ mapM_ (suppressChallenge path) challs
+  recs <- flip execStateT st $ mapM_ (suppressChallenge path) challs
 
   -- write all beacon records
   mapM_ (writeBeaconXML path) recs
 
-  -- write the NIST certificate
-  getNistCert path
-
 -- | A map from beacon times to beacon records.
 type RecordState = Map BeaconEpoch Record
+
+-- | Load (from current directory) all XML files containing beacon
+-- records into a map
+loadXML :: (MonadIO m) => FilePath -> m RecordState
+loadXML path = liftIO $ do
+  basenames <- filter (".xml" `isSuffixOf`) <$> getDirectoryContents path
+  let relnames = (\bname -> path </> bname) <$> basenames
+  records <- catMaybes . fmap fromXML <$> sequence (readFile <$> relnames)
+  return $ fromList $ (\x -> (fromIntegral $ timeStamp x, x)) <$> records
 
 -- | Lookup the secret index based on the randomness for this challenge,
 -- then remove the corresponding secret.
@@ -122,11 +132,3 @@ writeBeaconXML path rec = do
   let beacon = toXML rec
       filePath = beaconFilePath path $ fromIntegral $ timeStamp rec
   liftIO $ writeFile filePath beacon
-
--- | Downloads the NIST certificate and saves it.
-getNistCert :: (MonadIO m) => FilePath -> m ()
-getNistCert path = liftIO $ do
-  let certPath = certFilePath path
-  putStrLn $ "Writing NIST certificate to " ++ certPath
-  bs <- simpleHttp "https://beacon.nist.gov/certificate/beacon.cer"
-  writeFile certPath bs
