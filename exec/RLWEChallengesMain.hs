@@ -20,8 +20,6 @@ import Crypto.RLWE.Challenges.Params
 import Crypto.RLWE.Challenges.Suppress
 import Crypto.RLWE.Challenges.Verify
 
-import Crypto.Lol.Cyclotomic.Tensor.CPP
-
 data MainOpts =
   MainOpts
   { optChallDir :: FilePath -- ^ location of challenges
