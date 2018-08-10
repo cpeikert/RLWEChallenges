@@ -40,6 +40,7 @@ import Network.HTTP.Client hiding (path)
 import Prelude hiding (lookup, readFile, writeFile)
 
 import System.Directory (getDirectoryContents, removeFile)
+import System.FilePath.Posix ((</>))
 import System.Exit
 
 -- | Deletes the secret indicated by NIST beacon for each challenge in
@@ -65,8 +66,9 @@ type RecordState = Map BeaconEpoch Record
 -- records into a map
 loadXML :: (MonadIO m) => FilePath -> m RecordState
 loadXML path = liftIO $ do
-  names <- filter (".xml" `isSuffixOf`) <$> getDirectoryContents path
-  records <- catMaybes . fmap fromXML <$> sequence (readFile <$> names)
+  basenames <- filter (".xml" `isSuffixOf`) <$> getDirectoryContents path
+  let relnames = (\bname -> path </> bname) <$> basenames
+  records <- catMaybes . fmap fromXML <$> sequence (readFile <$> relnames)
   return $ fromList $ (\x -> (fromIntegral $ timeStamp x, x)) <$> records
 
 -- | Lookup the secret index based on the randomness for this challenge,
