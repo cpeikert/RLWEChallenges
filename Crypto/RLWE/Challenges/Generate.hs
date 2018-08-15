@@ -19,6 +19,7 @@ Generates challenges in non-legacy proto format.
 {-# LANGUAGE RebindableSyntax      #-}
 {-# LANGUAGE RecordWildCards       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeApplications      #-}
 
 module Crypto.RLWE.Challenges.Generate
 (generateMain,genChallengeU
@@ -152,11 +153,11 @@ genInstanceU (Rparams params@RLWRParams{..}) challengeID instanceID seed =
 toProtoParams :: ChallengeParams -> Params
 toProtoParams C{..} =
   reifyFactI (fromIntegral m) (\(_::proxy m) ->
-    let bound = proxy (C.errorBound svar eps) (Proxy::Proxy m)
+    let bound = C.errorBound @m svar eps
     in Cparams ContParams {..})
 toProtoParams D{..} =
   reifyFactI (fromIntegral m) (\(_::proxy m) ->
-    let bound = proxy (D.errorBound svar eps) (Proxy::Proxy m)
+    let bound = D.errorBound @m svar eps
     in Dparams DiscParams {..})
 toProtoParams R{..} = Rparams RLWRParams {..}
 
